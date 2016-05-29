@@ -43,4 +43,4 @@ gzip_static_extensions:
   - xml
   - txt
 
-gzip_static_compression_level: 0
+gzip_static_compression_level: 9
