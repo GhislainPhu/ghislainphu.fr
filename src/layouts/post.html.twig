@@ -1,0 +1,26 @@
+---
+layout: default
+---
+{% block content %}
+  <article>
+    <header>
+      <h1>{{ page.title }}</h1>
+      <time datetime="{{ page.date }}">{{ page.date|localizeddate('long', 'none', site.l10n.locale | default('en_US')) }}</time>
+    </header>
+    {{ page.content }}
+  </article>
+  <nav>
+    <header>
+      <h2 class="screen-reader-text">{{ site.l10n.navigation | default('Navigation') }}</h2>
+    </header>
+    <ul>
+      <li><a href="/">{{ site.l10n.home | default('Home') }}</a></li>
+      {% if site.author.twitter %}
+      <li><a href="https://twitter.com/{{ site.author.twitter | e('html_attr') }}" rel="me">Twitter</a></li>
+      {% endif %}
+      {% if site.author.github %}
+      <li><a href="https://github.com/{{ site.author.github | e('html_attr') }}" rel="me">GitHub</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+{% endblock %}

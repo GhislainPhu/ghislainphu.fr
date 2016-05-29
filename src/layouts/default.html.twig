@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default(site.l10n.lang) | default('en') | e('html_attr') }}">
+<head>
+  <title>{{ page.title | default(site.author.name) | e('html_attr') }}</title>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <link rel="stylesheet" href="/static/css/main.css">
+  <link rel="alternate" href="/atom.xml" type="application/rss+xml">
+
+  <script src="/static/js/main.js"></script>
+
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144x144.png">
+  <link rel="apple-touch-icon-precomposed" sizes="152x152" href="/apple-touch-icon-152x152.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+
+  {% if site.author.twitter %}
+    {% if page.image.feature %}
+      <meta name="twitter:card" content="summary_large_image">
+      <meta name="twitter:image" content="/static/img/{{ page.image.feature | e('html_attr') }}">
+    {% else %}
+      <meta name="twitter:card" content="summary">
+    {% endif %}
+
+    <meta name="twitter:image" content="/static/img/{{ page.image.thumbnail | default(site.author.photo) | e('html_attr') }}">
+    <meta name="twitter:title" content="{{ page.title | default(site.author.name) | e('html_attr') }}">
+    <meta name="twitter:description" content="{{ page.description | e('html_attr') }}">
+    <meta name="twitter:creator" content="@{{ site.author.twitter | e('html_attr') }}">
+  {% endif %}
+</head>
+<body{% if page.body_class is not empty %} class="{{ page.body_class | join(' ') }}"{% endif %}>
+  {% block content %}
+    {{ page.content }}
+  {% endblock %}
+</body>
+</html>

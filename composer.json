@@ -1,0 +1,20 @@
+{
+    "name": "ghislainphu/ghislainphu-fr",
+    "description": "The description for your theme",
+    "license": "MIT",
+    "type": "spress-site",
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/GhislainPhu/Pygments.php"
+        }
+    ],
+    "require": {
+        "spress/spress-installer": "2.0.*",
+        "paramonovav/spress-html-compress": "2.0.*",
+        "ghislainphu/spress-twig-extensions": "^0.1.2",
+        "ghislainphu/spress-gzip-static": "^0.1.1",
+        "kzykhys/pygments": "dev-symfony-process-3 as 1.0-dev",
+        "ghislainphu/spress-codeblock": "^0.1.0"
+    }
+}

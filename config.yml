@@ -1,0 +1,46 @@
+url: https://ghislainphu.fr
+permalink: none
+timezone: Europe/Paris
+
+author:
+  name: Ghislain PHU
+  photo: ghislain-phu.jpg
+  occupation: Développeur Web back-end (freelance)
+  github: GhislainPhu
+  twitter: poupi
+  about: "<p>Développeur Web back-end, j’exerce en tant qu’indépendant depuis 2011. La plupart de mes projets sont réalisés à l’aide de PHP (Vanilla, WordPress, Slim ou Laravel). Lorsque l’occasion se présente, j’apprécie également beaucoup travailler en Node.js ou en C#.</p><p>Sur un plan plus personnel, je pratique la course à pied, le tir sportif et joue de l’harmonica ou de la batterie dès que j’en ai l’occasion. J’aime apprendre, et par-dessus tout, apprendre des tas de choses qui ne me serviront jamais à rien (raison pour laquelle je prends par exemple, des cours de lituanien) !</p><p>Enfin, lorsqu’est venu le temps de se reposer, j’attrape mes bâtons de marche, mon sac à dos et mon piolet, et m’en vais parcourir le monde à la recherche nouveaux lieux à explorer.</p><p>Les sources de ce blog sont disponibles sur <a href=\"https://github.com/GhislainPhu/ghislainphu.fr\">Github</a>. Vous pouvez me contacter par email à l'adresse <a href=\"mailto:contact@ghislainphu.fr\">contact@ghislainphu.fr</a>.</p>"
+
+l10n:
+  lang: fr
+  locale: fr_FR
+  about: À propos
+  articles: Publications
+  home: Accueil
+  navigation: Navigation
+  social_networks: Réseaux Sociaux
+
+html_compress_exclude:
+  - static/css/main.css
+  - static/js/main.js
+  - static/font/inconsolata-v12-latin-700.woff
+  - static/font/inconsolata-v12-latin-700.woff2
+  - static/font/inconsolata-v12-latin-regular.woff
+  - static/font/inconsolata-v12-latin-regular.woff2
+  - static/font/merriweather-v13-latin-700.woff
+  - static/font/merriweather-v13-latin-700.woff2
+  - static/font/merriweather-v13-latin-regular.woff
+  - static/font/merriweather-v13-latin-regular.woff2
+
+twig_extensions:
+  - array
+  - intl
+  - text
+
+gzip_static_extensions:
+  - html
+  - css
+  - js
+  - xml
+  - txt
+
+gzip_static_compression_level: 0
