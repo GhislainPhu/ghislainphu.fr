@@ -20,6 +20,7 @@ l10n:
   social_networks: Réseaux Sociaux
 
 html_compress_exclude:
+  - robots.txt
   - static/css/main.css
   - static/js/main.js
   - static/font/inconsolata-v12-latin-700.woff
