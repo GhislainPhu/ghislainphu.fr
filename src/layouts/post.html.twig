@@ -4,7 +4,7 @@ layout: default
 {% block content %}
   <article>
     <header>
-      <h1>{{ page.title }}</h1>
+      <h1>{{ page.short_title | default(page.title) }}</h1>
       <time datetime="{{ page.date }}">{{ page.date|localizeddate('long', 'none', site.l10n.locale | default('en_US')) }}</time>
     </header>
     {{ page.content }}

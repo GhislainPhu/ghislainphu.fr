@@ -35,7 +35,7 @@ body_class: [ home ]
           {% for post in site.posts %}
             {% set date = post.date|localizeddate('long', 'none') %}
             <li>
-              <a href="{{ post.url | e('html_attr') }}">{{ post.title }}</a>
+              <a href="{{ post.url | e('html_attr') }}">{{ post.short_title | default(post.title) }}</a>
             </li>
           {% endfor %}
         </ul>
