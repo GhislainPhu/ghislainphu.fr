@@ -6,7 +6,7 @@
     <atom:link href="{{ site.url }}/{{ page.permalink }}" rel="self" type="application/rss+xml" />
       {% for post in site.posts | slice(0, site.max_item, true) %}
         <item>
-          <title><![CDATA[{{ post.title }}]]></title>
+          <title><![CDATA[{{ post.title | striptags }}]]></title>
           <description><![CDATA[{{ post.content }}]]></description>
           <link>{{ site.url }}{{ post.url }}</link>
           <pubDate>{{ post.date | date("D, d M Y H:i:s O") }}</pubDate>

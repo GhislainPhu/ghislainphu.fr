@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="{{ page.lang | default(site.l10n.lang) | default('en') | e('html_attr') }}">
 <head>
-  <title>{{ page.title | default(site.author.name) | e('html_attr') }}</title>
+  <title>{{ page.title | default(site.author.name) | striptags | e('html_attr') }}</title>
 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
