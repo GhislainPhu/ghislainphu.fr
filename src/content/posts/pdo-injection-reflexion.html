@@ -1,0 +1,663 @@
+---
+layout: post
+date: "2016-05-30T12:54:00+01:00"
+title: "PHP Data Objects (PDO) : injection par réflexion, <code>FETCH_CLASS</code> et méthodes magiques"
+short_title: "PDO : injection par réflexion et méthodes magiques"
+description: "Où l’on discute de PDO::FETCH_CLASS et des méthodes magiques, ou comment rendre fou un développeur trop sûr de lui."
+image:
+  feature: pdo-injection-reflexion/aliens.jpg
+  thumbnail: pdo-injection-reflexion/aliens.jpg
+---
+
+<section>
+  <header>
+    <h2 class="screen-reader-text">Avertissement</h2>
+  </header>
+
+  <p class="disclaimer">Cet article est une synthèse de mes recherches concernant un comportement non-documenté de PDO. Étant peu familiarisé au code source de PHP, il comporte peut-être des erreurs et des approximations. Si tel est le cas, je serais heureux d’en discuter avec vous sur <a href="https://github.com/GhislainPhu/ghislainphu.fr/issues">GitHub</a> !</p>
+</section>
+
+<section>
+  <header>
+    <h2>Introduction</h2>
+  </header>
+
+  <p>Une société avec laquelle je collabore régulièrement m’a demandé en début d’année de former l’un de ses apprentis. Tout juste débarqué dans l’entreprise, on lui avait alors confié la tâche de développer <em>from scratch</em> une application de prospection visant à simplifier la vie des commerciaux.</p>
+
+  <p>N’écoutant que son courage, il se jeta tête baissée sur son IDE et aligna, des semaines durant, des kilomètres de code ; jusqu’au jour où, sans doute happé par la lumière du jour, il leva les yeux et fit face au monstre qu’il venait de créer.</p>
+
+  <figure class="large">
+    <img src="/static/img/pdo-injection-reflexion/flying-spaghetti-monster.jpg" alt="The Flying Spaghetti Monster" width="1080" height="704">
+    <figcaption>Mon développeur junior relisant sont code.</figcaption>
+  </figure>
+
+  <p>Nous nous mîmes donc, deux demi-journées par quinzaine, à travailler en pair programming, alternant cours théoriques (architecture, sécurité, qualité, …), exemples pratiques et découverte des outils (git, composer, …).</p>
+
+  <p>Quand vint enfin le jour où, débarrassé de tous ces vilains mots de passe hardcodés qui me brûlaient les yeux, le code put être passé sous contrôle de version afin d’entamer sereinement le refactoring (tout reprendre de zéro eût été plus rapide mais beaucoup moins formateur).</p>
+
+  <p>Le plan d’action était simple : transformer les bibliothèques de fonctions qu’étaient les classes en code acceptable, puis en code propre et maintenable, dans le respect des paradigmes de la programmation orientée objet à laquelle le jeune développeur venait tout juste d’être initié ; sans intermédiaire magique, quitte à réécrire le code avec une couche d’abstraction après m’être assuré que les concepts sous-jacents avaient été compris et maîtrisés.</p>
+
+  <p>En corrigeant quelques bogues, nous nous aperçûmes très vite d’un problème d’inconsistance dans la modélisation des données : une même donnée était parfois représentée sous forme de tableau, d’autres fois sous forme d’objet et d’autres fois encore sous forme d’objet générique (<code>stdClass</code>).</p>
+
+  <p>Nous décidâmes alors, d’un commun accord, de prendre le taureau par les cornes et de mettre en place un certain nombre d’<a href="https://fr.wikipedia.org/wiki/Entit%C3%A9#En_informatique">entités</a>. Ce qui d’ailleurs tombait bien, puisqu’en fouillant le manuel, nous venions de découvrir la constante <a href="https://secure.php.net/manual/fr/pdo.constants.php#pdo.constants.fetch-class"><code>PDO::FETCH_CLASS</code></a>. Du gâteau !</p>
+
+  <section>
+    <header>
+      <h3 id="cahier-des-charges">Cahier des charges</h3>
+    </header>
+
+    <p>L’énorme base de données ayant subi quelques traumatismes (certaines colonnes ayant été castées à <a href="http://www.la-rache.com/">LA RACHE</a> lors de la première importation), il était essentiel que nous puissions manipuler toutes les données transitant par nos entités pour les nettoyer au passage.</p>
+
+    <p>Défi supplémentaire : les conventions de nommage imposaient le snake_case pour la base de données lorsque le camelCase était utilisé pour l’application.</p>
+
+    <ol>
+      <li>Pour chaque table de la base de données, une entité (classe) devait être créée.</li>
+      <li>Les propriétés de ces entités ne devaient être accessibles <strong>que</strong> via des getters et des setters (encapsulation lvl over 9000).</li>
+      <li>Les propriétés nommées en snake_case devaient être mappées sur leur équivalent camelCase.</li>
+    </ol>
+  </section>
+</section>
+
+<section>
+  <header>
+    <h2>The cake is a lie</h2>
+  </header>
+
+  <p>Pour le vieux de la vieille que vous êtes, implémenter de telles entités doit sembler bien trivial… Et c’est vrai !</p>
+
+{% codeblock lang:php phpopentag:false %}
+/* Alors c’est facile, yaka créer une classe parente */
+class Entity
+{
+    /* avec le getter qui va bien */
+    public function __get($name)
+    {
+        if (isset($this->$name)) {
+            /* et puis là on peut bricoler les données */
+            return $this->$name;
+        }
+    }
+
+    /* après on fait pareil avec le setter */
+    public function __set($name, $value)
+    {
+        if (isset($this->$name)) {
+            /* et on peut aussi bricoler les données */
+            $this->$name = $value;
+        } else if (false !== strpos($name, '_')) {
+            /* et traduire le snake_case en camelCase */
+            $this->__set($this->snakeCaseToCamelCase($name), $value);
+        }
+    }
+
+    /* et on implémente vite fait mal fait une méthode pour traduire le
+       snake_case en camelCase (sérieusement, n’utilisez pas ça) */
+    protected function snakeCaseToCamelCase($str)
+    {
+        $upperCamelCase = str_replace('_', '', ucwords($str, '_'));
+
+        return strtolower(substr($upperCamelCase, 0, 1)) . substr($upperCamelCase, 1);
+    }
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false %}
+/* et puis on implémente les entités */
+class User extends Entity
+{
+    /* et on leur ajoute les propriétés qui vont bien */
+    protected $email = '';
+    protected $firstName = '';
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false %}
+try {
+    /* et puis du coup on teste vite fait avec une base SQLite en RAM */
+    $dbh = new PDO('sqlite::memory:');
+    $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $dbh->exec('CREATE TABLE `users` (`email` TEXT, `first_name` TEXT)');
+    $dbh->exec('INSERT INTO `users` VALUES ("alice@example.org", "Alice")');
+    $dbh->exec('INSERT INTO `users` VALUES ("bob@example.org", "Bob" )');
+
+    $stmt = $dbh->prepare('SELECT * FROM `users` LIMIT 1');
+    $stmt->setFetchMode(PDO::FETCH_CLASS, 'User');
+    $stmt->execute();
+
+    /* et voilà, terminé, ça marche, j’vois pas pourquoi
+       il nous casse les pieds avec son roman l’autre ! */
+    var_dump($stmt->fetch());
+
+    /*
+      class User#3 (2) {
+        protected $email =>
+        string(17) "alice@example.org"
+        protected $firstName =>
+        string(5) "Alice"
+      }
+    */
+} catch (Exception $e) {
+    die($e->getMessage());
+}
+{% endcodeblock %}
+
+  <p>Comme je l’ai dit plus haut, implémenter de telles entités est effectivement trivial. Mais seulement quand on a repéré l’arnaque !</p>
+
+  <figure class="center">
+    <img src="/static/img/pdo-injection-reflexion/where-the-fuck-is-email.jpg" alt="DJ Pauly D Meme: &ldquo;Where the fuck is User::$email!?&rdquo;" width="536" height="498">
+    <figcaption>Question à 100 points : où est passée la propriété <code>$email</code> ? Pas par la méthode magique <code>__set()</code> en tout cas !</figcaption>
+  </figure>
+
+{% codeblock lang:php phpopentag:false %}
+/* User */
+public function __set($name, $value)
+{
+    var_dump($name);
+
+    /*
+      1. string(10) "first_name"
+      2. string(9) "firstName"
+    */
+
+    parent::__set($name, $value);
+}
+{% endcodeblock %}
+
+  <section>
+    <header>
+      <h3>Que s’est-il passé ?</h3>
+    </header>
+
+    <p>Avant de vous révéler la solution (spoiler alert : c’est dans le titre), intéressons-nous de plus près à la manière dont a été créé l’objet User.</p>
+
+{% codeblock lang:php phpopentag:false mark:8,13 %}
+class User extends Entity
+{
+    protected $email = '';
+    protected $firstName = '';
+
+    public function __construct()
+    {
+        var_dump('__construct()');
+    }
+
+    public function __set($name, $value)
+    {
+        var_dump("__set($name)");
+        parent::__set($name, $value);
+    }
+}
+
+/*
+  string(17) "__set(first_name)"
+  string(16) "__set(firstName)"
+  string(13) "__construct()"
+*/
+{% endcodeblock %}
+
+  <p><cite>« Tiens, c’est marrant ça, les valeurs sont attribuées avant que le constructeur ne soit appelé ! »</cite>, s’écriera le jeune développeur. Mais au vieux de la vieille, on ne la lui fait pas à lui ! Lui, il est là, assis sur sa chaise, et il facepalm… Mais il facepalm tellement putain !</p>
+
+  <p>Pour les moins perspicaces qui n’auraient pas encore saisi, je vous propose un autre exemple afin de vous mettre sur la piste :</p>
+
+{% codeblock lang:php phpopentag:false mark:4 %}
+class User extends Entity
+{
+    protected $email = '';
+    protected $first_name = ''; // Retour au snake_case
+
+    public function __construct()
+    {
+        var_dump('__construct()');
+    }
+
+    public function __set($name, $value)
+    {
+        var_dump("__set($name)");
+        parent::__set($name, $value);
+    }
+}
+
+/*
+  string(13) "__construct()"
+*/
+{% endcodeblock %}
+
+    <p>L’objet que nous venons de manipuler a donc été créé sans faire appel à son constructeur, et les valeurs de ses propriétés définies sans tenir compte de leur portée.</p>
+
+    <figure class="center">
+      <img src="/static/img/pdo-injection-reflexion/aliens.jpg" alt="Ancient Aliens Meme: &ldquo;Aliens&rdquo;" width="720" height="551">
+      <figcaption>La vérité sur T_PAAMAYIM_NEKUDOTAYIM enfin révélée.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <header>
+      <h2>L’injection par réflexion</h2>
+    </header>
+
+    <p>Le coupable ? La <em>réflexion</em> ! Ou, d’après <a href="https://fr.wikipedia.org/wiki/R%C3%A9flexion_(informatique)">Wikipédia</a> : <cite>« la capacité d’un programme à examiner, et éventuellement à modifier, ses propres structures internes de haut niveau lors de son exécution »</cite>.</p>
+
+    <p class="disclaimer">À cette étape de l’article, je tiens à vous rappeler que ce qui suit est hautement spéculatif. Malgré les nombreuses heures passées à décortiquer <a href="https://github.com/php/php-src/blob/master/ext/pdo/pdo_stmt.c">pdo_stmt.c</a>, une partie non-négligeable des sources de PHP relève encore pour moi du vaudou ; et il est ainsi envisageable qu’en dépit de ma bonne foi, je puisse raconter de grosses conneries.</p>
+
+    <p>Avant de s’intéresser au <em>comment</em>, intéressons-nous d’abord au <em>pourquoi</em>. Pourquoi diable l’équipe en charge de PDO s’est-elle embêtée à mettre au point un système aussi tordu ?</p>
+
+    <p>Sans être ultra-catégorique, mon intime conviction m’invite à penser que cette manière de faire est la seule qui soit suffisamment générique et robuste pour se révéler d’un quelconque intérêt.</p>
+
+    <p>Je soupçonne également fortement un impact bénéfique en terme de performance. Néanmoins, cette seconde hypothèse n’étant fondée sur aucun élément tangible, elle sera laissée de côté pour l’instant.</p>
+
+    <p>Prenons le problème à l’envers, et tentons d’imaginer la manière dont devrait fonctionner <code>PDO::FETCH_CLASS</code> pour répondre au même cahier des charges sans utiliser la réflexion.</p>
+
+    <p>On pourrait par exemple créer l’objet avant de définir ses propriétés. Avantage : le cycle de vie des objets et l’encapsulation sont respectés. Inconvénient : l’obligation de définir un setter afin de gérer les propriétés protégées et privées.</p>
+
+    <p>Cette approche semble plutôt élégante. D’ailleurs, elle l’est tellement qu’elle a déjà été implémentée, puisque ce comportement c’est celui de <a href="https://secure.php.net/manual/fr/pdo.constants.php#pdo.constants.fetch-into"><code>PDO::FETCH_INTO</code></a> :</p>
+
+{% codeblock lang:php phpopentag:false mark:7,16 %}
+class Color
+{
+    protected $hex = '';
+
+    public function __construct()
+    {
+        var_dump('__construct()');
+    }
+
+    public function __set($name, $value)
+    {
+        if (isset($this->$name)) {
+            $this->$name = $value;
+        }
+
+        var_dump("__set($name)");
+    }
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false mark:8,11,15 %}
+try {
+    $dbh = new PDO('sqlite::memory:');
+    $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $dbh->exec('CREATE TABLE `colors` (`hex` TEXT)');
+    $dbh->exec('INSERT INTO `colors` VALUES ("#FFFFFF")');
+
+    $white = new Color();
+
+    $stmt = $dbh->prepare('SELECT * FROM `colors` LIMIT 1');
+    $stmt->setFetchMode(PDO::FETCH_INTO, $white);
+    $stmt->execute();
+    $stmt->fetch();
+
+    var_dump($white);
+
+    /*
+      string(13) "__construct()"
+      string(10) "__set(hex)"
+
+      class Color#2 (1) {
+        protected $hex =>
+        string(7) "#FFFFFF"
+      }
+    */
+} catch (Exception $e) {
+    die($e->getMessage());
+}
+{% endcodeblock %}
+
+    <p>Une autre solution serait d’injecter les données provenant de la base de données dans l’objet via des méthodes définies explicitement. Mêmes avantages, mêmes inconvénients. Et une fois encore, ça existe déjà. Permettez-moi de vous présenter <a href="https://secure.php.net/manual/fr/pdo.constants.php#pdo.constants.fetch-func"><code>PDO::FETCH_FUNC</code></a> :</p>
+
+{% codeblock lang:php phpopentag:false mark:0 %}
+class Color
+{
+    protected $hex;
+
+    public function __construct($hex = '')
+    {
+        $this->hex = $hex;
+    }
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false mark:11-15 %}
+try {
+    $dbh = new PDO('sqlite::memory:');
+    $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $dbh->exec('CREATE TABLE `colors` (`hex` TEXT)');
+    $dbh->exec('INSERT INTO `colors` VALUES ("#FFFFFF")');
+
+    $stmt = $dbh->prepare('SELECT * FROM `colors` LIMIT 1');
+    $stmt->execute();
+
+    $colors = $stmt->fetchAll(PDO::FETCH_FUNC, function($hex) {
+        /* Puisque mes données arrivent en entrée,
+           je peux construire mon objet comme je veux */
+        return new Color($hex);
+    });
+
+    var_dump($colors);
+
+    /*
+      array(1) {
+        [0] =>
+        class Color#4 (1) {
+          protected $hex =>
+          string(7) "#FFFFFF"
+        }
+      }
+      }
+    */
+} catch (Exception $e) {
+    die($e->getMessage());
+}
+{% endcodeblock %}
+
+  <p>Vient alors la question du <em>comment</em>. Comment PDO injecte-t-il ses données dans les objets créés via le mode <code>PDO::FETCH_CLASS</code> ?</p>
+
+  <p>D’après ce que je pense avoir compris, il semblerait que le processus commence par l’initialisation d’une <code>zend_class_entry</code> (représentation interne d’une classe) correspondant à la classe à instancier.</p>
+
+  <p>Ensuite : déréférencement du constructeur (pour le désactiver), injection des données sérialisées dans la <code>zend_class_entry</code>, désérialisation de la <code>zend_class_entry</code>, réinjection du constructeur et appel au constructeur.</p>
+  </section>
+</section>
+
+<section>
+  <header>
+    <h2>Conclusion</h2>
+  </header>
+  <p>Le mode <code>PDO::FETCH_CLASS</code> de PDO utilise la réflexion afin d’injecter les valeurs des propriétés des classes qu’il instancie. Cette injection se fait alors aux dépens du principe d’encapsulation, ce qui peut parfois conduire à des comportements inattendus notamment en ce qui concerne l’utilisation des méthodes magiques.</p>
+
+  <p>Sans trop m’avancer, il me paraît évident (à la lecture du code source et au regard des modes alternatifs fournis par l’API) que le mode <code>PDO::FETCH_CLASS</code> a été spécialement conçu dans le but de fournir un moyen simple, rapide et générique de récupérer un jeu de données sous forme d’objet non-générique.</p>
+
+  <p>Est-ce une bonne chose ? Je crois oui. Car dans le contexte présenté ci-dessus, le contrat est pleinement rempli et la solution fournie conviendra parfaitement à l’écrasante majorité des projets que nous sommes amenés à construire. <strong>Mais encore aurait-il fallu documenter ce comportement !</strong></p>
+
+  <p>Dans le contexte qu’était le nôtre, trois solutions principales semblaient répondre au <a href="#cahier-des-charges">cahier des charges</a> :</p>
+
+  <ol>
+    <li>Utiliser le mode <code>PDO::FETCH_INTO</code> à la place du mode <code>PDO::FETCH_CLASS</code>.</li>
+    <li>Utiliser le mode <code>PDO::FETCH_FUNC</code> et implémenter une factory pour créer nos objets proprement.</li>
+    <li>Utiliser des propriétés virtuelles pour forcer le passage des valeurs par la méthode magique <code>__set()</code>.</li>
+  </ol>
+
+  <p>La première solution fût très vite écartée en raison de la surcharge de travail qu’elle représentait (créer un nouvel objet avant chaque requête, ne pas oublier de cloner l’objet dans les boucles de récupération, …).</p>
+
+  <p>Quant à la seconde, elle limitait nos possibilités à l’utilisation de la méthode <code>PDOStatement::fetchAll()</code> et nous imposait l’écriture d’une factory (chaque nouvelle ligne de code ajoutée au projet devant être maintenue par la suite).</p>
+
+  <p>Même si j’était plutôt réticent à l’idée d’utiliser des propriétés virtuelles, c’est bien vers la troisième méthode que nous nous sommes tournés. Ci-joint, un exemple d’implémentation utilisant <a href="https://github.com/Respect/Validation">respect/validation</a> pour le nettoyage des données.</p>
+
+  <p><strong>Note : cette implémentation suppose qu’aucune colonne de votre base de données ne soit nommée <em>hiddenProperties</em>.</strong></p>
+
+{% codeblock lang:php phpopentag:false mark:20,66,75,94 %}
+namespace MyApp\Model\Utility;
+
+use \Respect\Validation\Validator;
+
+/**
+ * Entity
+ *
+ * Provides virtually protected properties as a workaround to avoid conflicts
+ * between PDO's reflection injection and magic methods.
+ */
+trait EntityTrait
+{
+    /**
+     * Properties
+     *
+     * Classes should never access this array directly.
+     *
+     * @var mixed[]
+     */
+    protected $hiddenProperties = [];
+
+    /**
+     * {@inheritdoc}
+     *
+     * @param string $name The name of the property
+     *
+     * @return bool
+     */
+    public function __isset($name)
+    {
+        return $this->hasProperty($name);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * @param string $name The name of the property
+     *
+     * @return mixed
+     */
+    public function __get($name)
+    {
+        return $this->getPropertyValue($name);
+    }
+
+    /**
+     * {@inheritdoc}
+     *
+     * This method can use aliases.
+     *
+     * @param string $name The name of the property
+     * @param mixed $value The value of the property
+     */
+    public function __set($name, $value)
+    {
+        $this->setPropertyValue($name, $value);
+    }
+
+    /**
+     * Get the list of virtual properties
+     *
+     * @abstract
+     *
+     * @return string[] Defined properties
+     */
+    abstract protected function getProperties();
+
+    /**
+     * Get the list of virtual properties aliases
+     *
+     * Aliases are usefull to bind database columns names to class properties.
+     *
+     * @return string[] An array of `alias => property`
+     */
+    protected function getPropertiesAliases()
+    {
+        return [];
+    }
+
+    /**
+     * Get the list of properties validators
+     *
+     * ```
+     * return [
+     *     'id'       => Validator::intType()->positive(),
+     *     'password' => Validator::alnum()->notEmpty(),
+     * ]
+     * ```
+     *
+     * @see EntityTrait::setPropertyValue()
+     *
+     * @return Validator[]
+     */
+    protected function getPropertiesValidators()
+    {
+        return [];
+    }
+
+    /**
+     * Get the value of a given property
+     *
+     * @param string $name The name of the property
+     *
+     * @return mixed
+     */
+    protected function getPropertyValue($name)
+    {
+        if (isset($this->hiddenProperties[$name])) {
+            return $this->hiddenProperties[$name];
+        }
+    }
+
+    /**
+     * Check if a property is defined
+     *
+     * @param string $name The name of the property
+     *
+     * @return bool
+     */
+    protected function hasProperty($name)
+    {
+        return in_array($name, $this->getProperties());
+    }
+
+    /**
+     * Check if a property has a validator
+     *
+     * @param string $name The name of the property
+     *
+     * @return bool
+     */
+    protected function hasPropertyValidator($name)
+    {
+        $validators = $this->getPropertiesValidators();
+
+        if (!empty($validators[$name])) {
+            $validator = $validators[$name];
+
+            return is_object($validator) && $validator instanceof Validator;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the real name of an aliased property
+     *
+     * @param string $name Alias to resolve
+     *
+     * @return string
+     */
+    protected function resolvePropertyName($name)
+    {
+        if ($this->hasProperty($name)) {
+            return $name;
+        }
+
+        $aliases = $this->getPropertiesAliases();
+
+        if (isset($aliases[$name]) && $this->hasProperty($aliases[$name])) {
+            return $aliases[$name];
+        }
+    }
+
+    /**
+     * Set the value of a property
+     *
+     * This method can use aliases.
+     *
+     * @param string $name The name of the property
+     * @param mixed $value The value of the property
+     */
+    protected function setPropertyValue($name, $value)
+    {
+        $name = $this->resolvePropertyName($name);
+
+        if ($name && $this->validatePropertyValue($name, $value)) {
+            $this->hiddenProperties[$name] = $value;
+        }
+    }
+
+    /**
+     * Validate the value of a property
+     *
+     * @param string $name The name of the property
+     * @param mixed $value The value of the property
+     *
+     * @return bool Is the value valid?
+     */
+    protected function validatePropertyValue($name, $value)
+    {
+        if (!$this->hasProperty($name)) {
+            return false;
+        }
+
+        if (!$this->hasPropertyValidator($name)) {
+            return true;
+        }
+
+        return $this->getPropertiesValidators()[$name]->validate($value);
+    }
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false mark:8,10,15,20 %}
+namespace MyApp\Model\Entity;
+
+use \MyApp\Model\Utility;
+use \Respect\Validation\Validator;
+
+class User
+{
+    use Utility\EntityTrait;
+
+    protected function getProperties()
+    {
+        return [ 'email', 'firstName' ];
+    }
+
+    protected function getPropertiesAliases()
+    {
+        return [ 'first_name' => 'firstName' ];
+    }
+
+    protected function getPropertiesValidators()
+    {
+        return [ 'email' => Validator::optional(Validator::email()) ];
+    }
+}
+{% endcodeblock %}
+
+{% codeblock lang:php phpopentag:false mark:12 %}
+try {
+    $dbh = new PDO('sqlite::memory:');
+    $dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+    $dbh->exec('CREATE TABLE `users` (`email` TEXT, `first_name` TEXT)');
+    $dbh->exec('INSERT INTO `users` VALUES ("alice@example.org", "Alice")');
+    $dbh->exec('INSERT INTO `users` VALUES ("incorrect_email", "Bob")');
+
+    $stmt = $dbh->prepare('SELECT * FROM `users`');
+    $stmt->execute();
+
+    $users = $stmt->fetchAll(PDO::FETCH_CLASS, MyApp\Model\Entity\User::class);
+
+    var_dump($users);
+
+    /*
+      array(2) {
+        [0] =>
+        class MyApp\Model\Entity\User#4 (1) {
+          protected $hiddenProperties =>
+          array(2) {
+            'email' =>
+            string(17) "alice@example.org"
+            'firstName' =>
+            string(5) "Alice"
+          }
+        }
+        [1] =>
+        class MyApp\Model\Entity\User#9 (1) {
+          protected $hiddenProperties =>
+          array(1) {
+            'firstName' =>
+            string(3) "Bob"
+          }
+        }
+      }
+      */
+} catch (Exception $e) {
+    die($e->getMessage());
+}
+{% endcodeblock %}
+</section>
