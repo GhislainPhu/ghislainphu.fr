@@ -19,14 +19,14 @@
   {% if site.author.twitter %}
     {% if page.image.feature %}
       <meta name="twitter:card" content="summary_large_image">
-      <meta name="twitter:image" content="/static/img/{{ page.image.feature | e('html_attr') }}">
+      <meta name="twitter:image" content="{{ site.url }}/static/img/{{ page.image.feature }}">
     {% else %}
       <meta name="twitter:card" content="summary">
+      <meta name="twitter:image" content="{{ site.url }}/static/img/{{ page.image.thumbnail | default(site.author.photo) }}">
     {% endif %}
 
-    <meta name="twitter:image" content="/static/img/{{ page.image.thumbnail | default(site.author.photo) | e('html_attr') }}">
-    <meta name="twitter:title" content="{{ page.title | default(site.author.name) | e('html_attr') }}">
-    <meta name="twitter:description" content="{{ page.description | e('html_attr') }}">
+    <meta name="twitter:title" content="{{ page.title | default(site.author.name) | striptags | e('html_attr') }}">
+    <meta name="twitter:description" content="{{ page.description | default(site.description) | e('html_attr') }}">
     <meta name="twitter:creator" content="@{{ site.author.twitter | e('html_attr') }}">
   {% endif %}
 </head>
