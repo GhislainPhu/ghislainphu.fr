@@ -81,8 +81,12 @@ pre, code, .highlight { font-family: monospace; }
 /* Styles */
 
 html {
-  font-size: 1.25em;
+  font-size: 1em;
   border-top: .4rem solid #000;
+}
+
+@media screen and (min-width: 30em) {
+  html { font-size: 1.25em };
 }
 
 body {
